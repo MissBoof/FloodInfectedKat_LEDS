@@ -121,7 +121,7 @@ void updateFlowEffect() {
   if (flowIndex > 1) {
     flowStrip.setPixelColor(flowIndex - 2, flowStrip.Color(80, 0, 40));
   }
-
+  applyShockRunnersToStrip(flowStrip, NUM_FLOW, false);
   flowStrip.show();
 
   flowIndex++;
@@ -226,6 +226,45 @@ void updateMotionShock() {
 }
 
 // -----------------------------
+// Helper for LEDS to turn PINK on all LED strips
+// -----------------------------
+void applyShockRunnersToStrip(Adafruit_NeoPixel &strip, int numPixels, bool suppressGreen) {
+  for (int i = 0; i < numPixels; i++) {
+    uint32_t existing = strip.getPixelColor(i);
+
+    int red   = (uint8_t)(existing >> 16);
+    int green = (uint8_t)(existing >> 8);
+    int blue  = (uint8_t)(existing);
+
+    for (int r = 0; r < MAX_SHOCK_RUNNERS; r++) {
+      if (!shockRunnerActive[r]) continue;
+
+      float dist = fabs(i - shockRunnerPos[r]);
+      if (dist < shockRunnerLength[r]) {
+        float strength = 1.0 - (dist / shockRunnerLength[r]);
+        int pinkAmount = (int)(strength * 255.0);
+
+        red = max(red, 100 + pinkAmount / 2);
+        blue = max(blue, 85 + pinkAmount / 2);
+
+        if (suppressGreen) {
+          green = min(green, 12 + pinkAmount / 25);
+        } else {
+          green = min(255, green + pinkAmount / 18);
+        }
+      }
+    }
+
+    red = constrain(red, 0, 255);
+    green = constrain(green, 0, 255);
+    blue = constrain(blue, 0, 255);
+
+    strip.setPixelColor(i, strip.Color(red, green, blue));
+  }
+}
+
+
+// -----------------------------
 // ORGANIC INFECTED BREATHING
 // -----------------------------
 void infectedPulseEffect() {
@@ -278,23 +317,6 @@ void infectedPulseEffect() {
       green = max(1, green / 6);
     }
 
-    // -----------------------------
-    // Hot pink shock runners overlay
-    // -----------------------------
-    for (int r = 0; r < MAX_SHOCK_RUNNERS; r++) {
-      if (!shockRunnerActive[r]) continue;
-
-      float dist = fabs(i - shockRunnerPos[r]);
-      if (dist < shockRunnerLength[r]) {
-        float strength = 1.0 - (dist / shockRunnerLength[r]);
-        int pinkAmount = (int)(strength * 255.0);
-
-        red   = max(red,   100 + pinkAmount / 2);
-        green = min(green, 12 + pinkAmount / 25);
-        blue  = max(blue,  85 + pinkAmount / 2);
-      }
-    }
-
     red = constrain(red, 0, 255);
     green = constrain(green, 0, 165);
     blue = constrain(blue, 0, 255);
@@ -313,7 +335,7 @@ void infectedPulseEffect() {
       shockRunnerActive[r] = false;
     }
   }
-
+  applyShockRunnersToStrip(pulseStrip, NUM_PULSE, true);
   pulseStrip.show();
 }
 
