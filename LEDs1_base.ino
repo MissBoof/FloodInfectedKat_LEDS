@@ -27,6 +27,14 @@ uint32_t hotPink;
 float grossPhase = 0.0;
 int flowIndex = 0;
 
+float flowPhase = 0.0;
+int flowTracePos = 0;
+int flowTraceDir = 1;
+
+bool flowSupercharge = false;
+int flowSuperchargeTimer = 0;
+int flowSuperchargeCooldown = 0;
+
 // -----------------------------
 // IMU / motion shock detection
 // -----------------------------
@@ -110,24 +118,172 @@ void fadeAll(uint8_t amount) {
   }
 }
 
+// -----------------------------
+//  Hot PINK needles
+// -----------------------------
 void updateFlowEffect() {
-  fadeAll(12);
+  static bool initialized = false;
+  static int needleState[NUM_FLOW];          // 0 = on, 1 = off/failing, 2 = flicker-back
+  static unsigned long needleTimer[NUM_FLOW];
+  static int needleFlickerCount[NUM_FLOW];
 
-  flowStrip.setPixelColor(flowIndex, hotPink);
+  static int tracePos1 = 0;
+  static int tracePos2 = NUM_FLOW / 2;
+  static int traceDir1 = 1;
+  static int traceDir2 = -1;
 
-  if (flowIndex > 0) {
-    flowStrip.setPixelColor(flowIndex - 1, flowStrip.Color(180, 10, 100));
+  static unsigned long lastTraceMove = 0;
+  static unsigned long lastStateUpdate = 0;
+
+  if (!initialized) {
+    for (int i = 0; i < NUM_FLOW; i++) {
+      needleState[i] = 0;
+      needleTimer[i] = 0;
+      needleFlickerCount[i] = 0;
+    }
+    initialized = true;
   }
-  if (flowIndex > 1) {
-    flowStrip.setPixelColor(flowIndex - 2, flowStrip.Color(80, 0, 40));
+
+  unsigned long now = millis();
+
+    bool shockActiveOnFlow = false;
+  for (int r = 0; r < MAX_SHOCK_RUNNERS; r++) {
+    if (shockRunnerActive[r]) {
+      shockActiveOnFlow = true;
+      break;
+    }
   }
-  applyShockRunnersToStrip(flowStrip, NUM_FLOW, false);
+
+  // -----------------------------
+  // Move the brighter pink trace areas
+  // -----------------------------
+  if (now - lastTraceMove > 55) {
+    tracePos1 += traceDir1;
+    tracePos2 += traceDir2;
+
+    if (tracePos1 <= 0 || tracePos1 >= NUM_FLOW - 1) traceDir1 *= -1;
+    if (tracePos2 <= 0 || tracePos2 >= NUM_FLOW - 1) traceDir2 *= -1;
+
+    lastTraceMove = now;
+  }
+
+  // -----------------------------
+  // Occasionally make random LEDs fail/off
+  // -----------------------------
+  if (now - lastStateUpdate > 80) {
+    for (int i = 0; i < NUM_FLOW; i++) {
+      if (needleState[i] == 0) {
+        // occasional dropout
+        if (random(0, 1000) < 10) {
+          needleState[i] = 1;
+          needleTimer[i] = now + random(150, 600);
+        }
+      } else if (needleState[i] == 1) {
+        // when off time ends, go into flicker-back mode
+        if (now >= needleTimer[i]) {
+          needleState[i] = 2;
+          needleFlickerCount[i] = random(3, 7);
+          needleTimer[i] = now + random(35, 70);
+        }
+      } else if (needleState[i] == 2) {
+        // haunted-house flicker back on
+        if (now >= needleTimer[i]) {
+          needleFlickerCount[i]--;
+
+          if (needleFlickerCount[i] <= 0) {
+            needleState[i] = 0;
+          } else {
+            needleTimer[i] = now + random(25, 80);
+          }
+        }
+      }
+    }
+
+    lastStateUpdate = now;
+  }
+
+  // -----------------------------
+  // Draw the strip
+  // -----------------------------
+  for (int i = 0; i < NUM_FLOW; i++) {
+    // base dim hot pink
+        int red = 0;
+    int green = 0;
+    int blue = 0;
+
+    // only draw the normal needle effect when no shock is active
+    if (!shockActiveOnFlow) {
+      red = 75;
+      green = 0;
+      blue = 55;
+
+          // slight breathing glow so needles aren't dead static
+      float slowGlow = (sin((millis() / 900.0) + i * 0.15) + 1.0) * 0.5;
+      red  += slowGlow * 18;
+      blue += slowGlow * 14;
+
+      // small infected contamination, but subtle
+      if (random(0, 1000) < 6) {
+        red   += random(8, 20);
+        green += random(4, 14);
+        blue  -= random(0, 8);
+      }
+
+      // -----------------------------
+      // Bright tracing pink areas
+      // -----------------------------
+      float d1 = fabs(i - tracePos1);
+      float d2 = fabs(i - tracePos2);
+
+      if (d1 < 2.5) {
+        float strength = 1.0 - (d1 / 2.5);
+        red  += strength * 120;
+        blue += strength * 95;
+      }
+
+      if (d2 < 2.0) {
+        float strength = 1.0 - (d2 / 2.0);
+        red  += strength * 105;
+        blue += strength * 85;
+      }
+
+      // tiny infected fringe around traces
+      if ((d1 < 4.0 || d2 < 3.5) && random(0, 100) < 12) {
+        red   += random(5, 15);
+        green += random(3, 10);
+      }
+
+      // -----------------------------
+      // Broken / off / flicker-back behavior
+      // -----------------------------
+      if (needleState[i] == 1) {
+        red = red / 10;
+        green = 0;
+        blue = blue / 10;
+      } else if (needleState[i] == 2) {
+        bool onThisBeat = random(0, 100) < 55;
+        if (!onThisBeat) {
+          red = red / 12;
+          green = 0;
+          blue = blue / 12;
+        } else {
+          red += 25;
+          blue += 18;
+        }
+      }
+    }
+
+    red = constrain(red, 0, 255);
+    green = constrain(green, 0, 45);
+    blue = constrain(blue, 0, 255);
+
+    flowStrip.setPixelColor(i, flowStrip.Color(red, green, blue));
+  }
+
+  // keep your accelerometer pink runners on top
+  applyShockRunnersToStrip(flowStrip, NUM_FLOW, true);
+
   flowStrip.show();
-
-  flowIndex++;
-  if (flowIndex >= NUM_FLOW) {
-    flowIndex = 0;
-  }
 }
 
 // -----------------------------
