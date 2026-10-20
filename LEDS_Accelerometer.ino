@@ -143,16 +143,24 @@ void checkMovement() {
     }
   }
 
-  // Debug output
-  if (millis() - lastPrint >= 500) {
 
+  // Debug output every second
+  if (millis() - lastPrint >= 1000) {
     lastPrint = millis();
 
-    Serial.print("Motion: ");
+    Serial.print("UPTIME: ");
+    Serial.print(millis() / 1000);
+    Serial.print(" seconds");
+
+    Serial.print(" | MOTION: ");
     Serial.print(motionAmount, 3);
 
-    Serial.print(" | State: ");
-    Serial.println(isMoving ? "MOVING" : "STILL");
+    Serial.print(" | STATE: ");
+    Serial.print(isMoving ? "MOVING" : "STILL");
+
+    Serial.print(" | LAST MOVEMENT: ");
+    Serial.print((millis() - lastMovement) / 1000);
+    Serial.println(" seconds ago");
   }
 }
 
