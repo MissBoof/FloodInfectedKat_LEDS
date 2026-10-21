@@ -1,0 +1,63 @@
+#include <Arduino.h>
+#include <DFRobotDFPlayerMini.h>
+
+DFRobotDFPlayerMini player;
+
+
+int currentTrack = 1;
+const int totalTracks = 5;
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+
+  Serial.println("Starting DFPlayer...");
+
+  Serial1.begin(9600);
+
+  if (!player.begin(Serial1, true, true)) {
+    Serial.println("DFPlayer NOT detected!");
+    while (true) {
+      delay(1000);
+    }
+  }
+
+  Serial.println("DFPlayer detected!");
+
+  player.volume(30);   // 0-30
+  delay(500);
+
+  Serial.println("Playing track 1");
+  player.playMp3Folder(currentTrack);
+}
+
+void loop() {
+
+  if (player.available()) {
+
+    uint8_t type = player.readType();
+    int value = player.read();
+
+    // Current MP3 finished playing
+    if (type == DFPlayerPlayFinished) {
+
+      Serial.print("Finished track: ");
+      Serial.println(currentTrack);
+
+      currentTrack++;
+
+      // Start over after the last track
+      if (currentTrack > totalTracks) {
+        currentTrack = 1;
+      }
+
+      // Small pause between clips
+      delay(1000);
+
+      Serial.print("Playing track: ");
+      Serial.println(currentTrack);
+
+      player.playMp3Folder(currentTrack);
+    }
+  }
+}
