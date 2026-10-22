@@ -1,17 +1,21 @@
+
 #include <Arduino.h>
 #include <DFRobotDFPlayerMini.h>
 
 DFRobotDFPlayerMini player;
 
+// Nano D5 connects to Audio Feather D6
+#define TRANSFORM_INPUT 6
 
-int currentTrack = 1;
-const int totalTracks = 5;
+bool lastTransformSignal = false;
 
 void setup() {
   Serial.begin(115200);
   delay(2000);
 
-  Serial.println("Starting DFPlayer...");
+  pinMode(TRANSFORM_INPUT, INPUT_PULLDOWN);
+
+  Serial.println("Starting Kat Audio Controller...");
 
   Serial1.begin(9600);
 
@@ -24,40 +28,34 @@ void setup() {
 
   Serial.println("DFPlayer detected!");
 
-  player.volume(30);   // 0-30
+  player.volume(30);
   delay(500);
 
-  Serial.println("Playing track 1");
-  player.playMp3Folder(currentTrack);
+  Serial.println("Ready for transformation trigger!");
 }
 
 void loop() {
+  bool signal = digitalRead(TRANSFORM_INPUT);
 
+  // Trigger only on a new HIGH pulse
+  if (signal && !lastTransformSignal) {
+    Serial.println("TRANSFORMATION AUDIO TRIGGERED!");
+
+    player.playMp3Folder(1);
+  }
+
+  lastTransformSignal = signal;
+
+  // Read DFPlayer messages
   if (player.available()) {
-
     uint8_t type = player.readType();
     int value = player.read();
 
-    // Current MP3 finished playing
     if (type == DFPlayerPlayFinished) {
-
-      Serial.print("Finished track: ");
-      Serial.println(currentTrack);
-
-      currentTrack++;
-
-      // Start over after the last track
-      if (currentTrack > totalTracks) {
-        currentTrack = 1;
-      }
-
-      // Small pause between clips
-      delay(1000);
-
-      Serial.print("Playing track: ");
-      Serial.println(currentTrack);
-
-      player.playMp3Folder(currentTrack);
+      Serial.print("Transformation audio finished: ");
+      Serial.println(value);
     }
   }
+
+  delay(10);
 }
